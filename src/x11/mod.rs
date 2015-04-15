@@ -26,11 +26,10 @@ use xlib::{
     XRootWindowOfScreen
 };
 
-pub use xlib::Atom;
 pub use self::atoms::{
     CommonAtom,
     PredefinedAtom,
-    ToAtom,
+    Atom,
 };
 
 pub use self::atoms::CommonAtom::*;
@@ -42,7 +41,7 @@ mod consts;
 /// X11 display connection.
 pub struct Display {
     xlib_display: *mut xlib::Display,
-    atoms: RefCell<HashMap<String, Atom>>,
+    atoms: RefCell<HashMap<String, xlib::Atom>>,
 }
 
 impl Drop for Display {
@@ -52,7 +51,7 @@ impl Drop for Display {
 }
 
 impl Display {
-    fn intern_atom(&self, atom_name: String) -> Atom {
+    fn intern_atom(&self, atom_name: String) -> xlib::Atom {
         {
             let map = self.atoms.borrow();
 
@@ -63,15 +62,11 @@ impl Display {
         let mut map = self.atoms.borrow_mut();
 
         unsafe {
-            let value: Atom = XInternAtom(self.xlib_display,
+            let value: xlib::Atom = XInternAtom(self.xlib_display,
                                           CString::new(atom_name.clone()).unwrap().as_ptr() as *mut i8, 0);
             map.insert(atom_name, value);
             value
         }
-    }
-
-    pub fn get_atom<T:ToAtom+std::fmt::Debug>(&self, atom: T) -> Atom {
-        atom.to_atom(self)
     }
 
     pub fn open_default() -> Option<Display> { unsafe {
@@ -116,9 +111,9 @@ pub struct Window<'a> {
 }
 
 impl<'a> Window<'a> {
-    pub fn get_property(&self, property: Atom) -> Option<WindowProperty> {
+    pub fn get_property<T:Atom+std::fmt::Debug+Sized>(&self, property: T) -> Option<WindowProperty> {
         unsafe {
-            let mut return_type: Atom = uninitialized();
+            let mut return_type: xlib::Atom = uninitialized();
             let mut return_format: c_int = uninitialized();
             let mut return_nitems: c_ulong = uninitialized();
             let mut return_bytes_after: c_ulong = uninitialized();
@@ -127,7 +122,7 @@ impl<'a> Window<'a> {
             let result = XGetWindowProperty(
                 self.display.xlib_display,
                 self.window,
-                property,
+                property.to_atom(self.display),
                 0,
                 1024 * 1024, // buffer size
                 0,
@@ -155,7 +150,7 @@ impl<'a> Window<'a> {
 }
 
 pub struct WindowProperty {
-    pub data_type: Atom,
+    data_type: xlib::Atom,
     pub format: u8, // valid values are 8, 16 and 32
     data: *mut c_uchar,
     size: usize,

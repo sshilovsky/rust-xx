@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
 use std::fmt::Debug;
-use super::Atom;
 use super::Display;
+use xlib;
 
-pub trait ToAtom {
-    fn to_atom(self, display: &Display) -> Atom
+pub trait Atom {
+    fn to_atom(self, display: &Display) -> xlib::Atom
         where Self: Debug+Sized {
             display.intern_atom(format!("{:?}", self))
     }
@@ -90,12 +90,12 @@ pub enum CommonAtom {
     UTF8_STRING,
 }
 
-impl ToAtom for CommonAtom {
+impl Atom for CommonAtom {
 }
 
-impl ToAtom for PredefinedAtom {
+impl Atom for PredefinedAtom {
     #[allow(unused_variables)]
-    fn to_atom(self, display: &Display) -> Atom {
-        self as Atom
+    fn to_atom(self, display: &Display) -> xlib::Atom {
+        self as xlib::Atom
     }
 }
