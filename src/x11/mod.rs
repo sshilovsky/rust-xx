@@ -14,7 +14,6 @@ use std::mem::{
     uninitialized,
 };
 use std::ptr;
-use std::rc::Rc;
 use xlib;
 use xlib::{ 
     XCloseDisplay,
@@ -59,14 +58,13 @@ impl Display {
                 return *x
             }
         }
+        // TODO thread-safety in borrow_mut call
         let mut map = self.atoms.borrow_mut();
 
-        unsafe {
-            let value: xlib::Atom = XInternAtom(self.xlib_display,
-                                          CString::new(atom_name.clone()).unwrap().as_ptr() as *mut i8, 0);
-            map.insert(atom_name, value);
-            value
-        }
+        let value: xlib::Atom = unsafe { XInternAtom(self.xlib_display,
+                                      CString::new(atom_name.clone()).unwrap().as_ptr() as *mut i8, 0) };
+        map.insert(atom_name, value);
+        value
     }
 
     pub fn open_default() -> Option<Display> { unsafe {
