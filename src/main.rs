@@ -21,7 +21,7 @@ fn main() {
     println!("{:?} {:?}", display.get_atom(x11::PIXMAP), display.get_atom(_NET_DESKTOP_NAMES));
 
     let screen = display.default_screen();
-    let root = screen.root;
+    let root = screen.root_window();
 
     let property = root.get_property(display.get_atom(_NET_DESKTOP_NAMES));
 

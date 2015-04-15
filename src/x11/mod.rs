@@ -84,26 +84,30 @@ impl Display {
         })
     }}
 
-    pub fn default_screen(&self) -> Screen { unsafe {
-        let screen = XDefaultScreenOfDisplay(self.xlib_display);
+    pub fn default_screen(&self) -> Screen {
+        let screen = unsafe { XDefaultScreenOfDisplay(self.xlib_display) };
         assert!(screen != ptr::null_mut());
 
         Screen {
             display: self,
-            screen: screen,
-            root: Window {
-                display: self,
-                window: XRootWindowOfScreen(screen),
-            },
+            xlib_screen: screen,
         }
-    }}
+    }
 
 }
 
 pub struct Screen<'a> {
     display: &'a Display,
-    screen: *mut xlib::Screen,
-    pub root: Window<'a>,
+    xlib_screen: *mut xlib::Screen,
+}
+
+impl<'a> Screen<'a> {
+    pub fn root_window(&self) -> Window {
+        Window {
+            display: self.display,
+            window: unsafe { XRootWindowOfScreen(self.xlib_screen) },
+        }
+    }
 }
 
 pub struct Window<'a> {
