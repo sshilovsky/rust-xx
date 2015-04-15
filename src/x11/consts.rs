@@ -8,4 +8,3 @@ use libc::{
 pub static AnyPropertyType: Atom = 0;
 pub static None: Atom = 0;
 pub static Success: c_int = 0;
-

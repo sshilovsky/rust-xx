@@ -2,15 +2,19 @@ use libc::{
     c_int,
     c_uchar,
     c_ulong,
+    c_void,
 };
+use std;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::{
     CString,
 };
 use std::mem::{
-    transmute,
     uninitialized,
 };
 use std::ptr;
+use std::rc::Rc;
 use xlib;
 use xlib::{ 
     XCloseDisplay,
@@ -23,79 +27,99 @@ use xlib::{
 };
 
 pub use xlib::Atom;
+pub use self::atoms::{
+    CommonAtom,
+    PredefinedAtom,
+    ToAtom,
+};
 
-pub mod atoms;
-pub mod consts;
+pub use self::atoms::CommonAtom::*;
+pub use self::atoms::PredefinedAtom::*;
 
-#[allow(non_snake_case)]
-pub struct Atoms {
-    pub _NET_CLIENT_LIST: Atom,
-    pub _NET_DESKTOP_NAMES: Atom,
-    pub _NET_SUPPORTED: Atom,
+mod atoms;
+mod consts;
+
+struct DisplayStruct {
+    xlib_display: *mut xlib::Display,
+    atoms: RefCell<HashMap<String, Atom>>,
+}
+
+impl Drop for DisplayStruct {
+    fn drop(&mut self) { unsafe {
+        XCloseDisplay(self.xlib_display);
+    }}
 }
 
 pub struct Display {
-    display: *mut xlib::Display,
-    pub atoms: Atoms,
-}
-
-pub struct Screen {
-    display: *mut xlib::Display,
-    screen: *mut xlib::Screen,
-    pub root: Window,
-}
-
-pub struct Window<'a> {
-    display: &'a Display,
-    window: xlib::Window,
-}
-
-#[derive(Debug)]
-pub struct WindowProperty {
-    pub data_type: Atom,
-    pub format: u8, // valid values are 8, 16 and 32
-    data: *mut c_uchar,
-    size: usize,
+    unwrap: Rc<DisplayStruct>,
 }
 
 impl Display {
-    pub fn open_default() -> Option<Display> { unsafe {
-        let display = XOpenDisplay(ptr::null_mut());
-        if display == ptr::null_mut() { return None }
-
-        Some(Display {
-                display: display,
-                atoms: Display::load_atoms(display),
-        })
-    }}
-
-    unsafe fn load_atoms(display: *mut xlib::Display) -> Atoms {
-        Atoms {
-            _NET_CLIENT_LIST: XInternAtom(display, CString::new("_NET_CLIENT_LIST").unwrap().as_ptr() as *mut i8, 0),
-            _NET_DESKTOP_NAMES: XInternAtom(display, CString::new("_NET_DESKTOP_NAMES").unwrap().as_ptr() as *mut i8, 0),
-            _NET_SUPPORTED: XInternAtom(display, CString::new("_NET_SUPPORTED").unwrap().as_ptr() as *mut i8, 0),
+    pub fn clone(&self) -> Display {
+        Display {
+            unwrap: self.unwrap.clone(),
         }
     }
 
+    fn intern_atom(&self, atom_name: String) -> Atom {
+        {
+            let map = self.unwrap.atoms.borrow();
+
+            if let Some(x) = map.get(&atom_name) {
+                return *x
+            }
+        }
+        let mut map = self.unwrap.atoms.borrow_mut();
+
+        unsafe {
+            let value: Atom = XInternAtom(self.unwrap.xlib_display,
+                                          CString::new(atom_name.clone()).unwrap().as_ptr() as *mut i8, 0);
+            map.insert(atom_name, value);
+            value
+        }
+    }
+
+    pub fn get_atom<T:ToAtom+std::fmt::Debug>(&self, atom: T) -> Atom {
+        atom.to_atom(self)
+    }
+
+    pub fn open_default() -> Option<Display> { unsafe {
+        let xlib_display = XOpenDisplay(ptr::null_mut());
+        if xlib_display == ptr::null_mut() { return None }
+
+        Some(Display {
+            unwrap: Rc::new(DisplayStruct {
+                xlib_display: xlib_display,
+                atoms: RefCell::new(HashMap::new()),
+            }),
+        })
+    }}
+
     pub fn default_screen(&self) -> Screen { unsafe {
-        let screen = XDefaultScreenOfDisplay(self.display);
+        let screen = XDefaultScreenOfDisplay(self.unwrap.xlib_display);
         assert!(screen != ptr::null_mut());
 
-        Screen{
-            display: self.display,
+        Screen {
+            display: self.clone(),
             screen: screen,
             root: Window {
-                display: self.display,
+                display: self.clone(),
                 window: XRootWindowOfScreen(screen),
             },
         }
     }}
+
 }
 
-impl Drop for Display {
-    fn drop(&mut self) { unsafe {
-        XCloseDisplay(self.display);
-    }}
+pub struct Screen {
+    display: Display,
+    screen: *mut xlib::Screen,
+    pub root: Window,
+}
+
+pub struct Window {
+    display: Display,
+    window: xlib::Window,
 }
 
 impl Window {
@@ -108,7 +132,7 @@ impl Window {
             let mut return_buffer: *mut c_uchar = uninitialized();
 
             let result = XGetWindowProperty(
-                self.display,
+                self.display.unwrap.xlib_display,
                 self.window,
                 property,
                 0,
@@ -137,23 +161,25 @@ impl Window {
     }
 }
 
+pub struct WindowProperty {
+    pub data_type: Atom,
+    pub format: u8, // valid values are 8, 16 and 32
+    data: *mut c_uchar,
+    size: usize,
+}
+
 impl WindowProperty {
     pub fn as_string(&self) -> Option<String> {
-        if self.data_type == atoms::STRING {
-                if self.format != 8 { return None; }
-                let vec = unsafe { Vec::from_raw_parts(self.data, self.size, self.size) };
-                String::from_utf8(vec).ok()
-            }
-        else {
-            None
-        }
+        if self.format != 8 { return None; }
+        let vec = unsafe { Vec::from_raw_parts(self.data, self.size, self.size) };
+        String::from_utf8(vec).ok()
     }
 }
 
 impl Drop for WindowProperty {
     fn drop(&mut self) {
         unsafe {
-            XFree(transmute(self.data));
+            XFree(self.data as *mut c_void);
         }
     }
 }
