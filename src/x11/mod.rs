@@ -39,40 +39,31 @@ pub use self::atoms::PredefinedAtom::*;
 mod atoms;
 mod consts;
 
-struct DisplayStruct {
+/// X11 display connection.
+pub struct Display {
     xlib_display: *mut xlib::Display,
     atoms: RefCell<HashMap<String, Atom>>,
 }
 
-impl Drop for DisplayStruct {
+impl Drop for Display {
     fn drop(&mut self) { unsafe {
         XCloseDisplay(self.xlib_display);
     }}
 }
 
-pub struct Display {
-    unwrap: Rc<DisplayStruct>,
-}
-
 impl Display {
-    pub fn clone(&self) -> Display {
-        Display {
-            unwrap: self.unwrap.clone(),
-        }
-    }
-
     fn intern_atom(&self, atom_name: String) -> Atom {
         {
-            let map = self.unwrap.atoms.borrow();
+            let map = self.atoms.borrow();
 
             if let Some(x) = map.get(&atom_name) {
                 return *x
             }
         }
-        let mut map = self.unwrap.atoms.borrow_mut();
+        let mut map = self.atoms.borrow_mut();
 
         unsafe {
-            let value: Atom = XInternAtom(self.unwrap.xlib_display,
+            let value: Atom = XInternAtom(self.xlib_display,
                                           CString::new(atom_name.clone()).unwrap().as_ptr() as *mut i8, 0);
             map.insert(atom_name, value);
             value
@@ -88,22 +79,20 @@ impl Display {
         if xlib_display == ptr::null_mut() { return None }
 
         Some(Display {
-            unwrap: Rc::new(DisplayStruct {
-                xlib_display: xlib_display,
-                atoms: RefCell::new(HashMap::new()),
-            }),
+            xlib_display: xlib_display,
+            atoms: RefCell::new(HashMap::new()),
         })
     }}
 
     pub fn default_screen(&self) -> Screen { unsafe {
-        let screen = XDefaultScreenOfDisplay(self.unwrap.xlib_display);
+        let screen = XDefaultScreenOfDisplay(self.xlib_display);
         assert!(screen != ptr::null_mut());
 
         Screen {
-            display: self.clone(),
+            display: self,
             screen: screen,
             root: Window {
-                display: self.clone(),
+                display: self,
                 window: XRootWindowOfScreen(screen),
             },
         }
@@ -111,18 +100,18 @@ impl Display {
 
 }
 
-pub struct Screen {
-    display: Display,
+pub struct Screen<'a> {
+    display: &'a Display,
     screen: *mut xlib::Screen,
-    pub root: Window,
+    pub root: Window<'a>,
 }
 
-pub struct Window {
-    display: Display,
+pub struct Window<'a> {
+    display: &'a Display,
     window: xlib::Window,
 }
 
-impl Window {
+impl<'a> Window<'a> {
     pub fn get_property(&self, property: Atom) -> Option<WindowProperty> {
         unsafe {
             let mut return_type: Atom = uninitialized();
@@ -132,7 +121,7 @@ impl Window {
             let mut return_buffer: *mut c_uchar = uninitialized();
 
             let result = XGetWindowProperty(
-                self.display.unwrap.xlib_display,
+                self.display.xlib_display,
                 self.window,
                 property,
                 0,
