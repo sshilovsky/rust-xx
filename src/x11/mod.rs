@@ -1,5 +1,6 @@
 use libc::{
     c_int,
+    c_long,
     c_uchar,
     c_ulong,
     c_void,
@@ -22,24 +23,24 @@ use xlib::{
     XGetWindowProperty, 
     XInternAtom, 
     XOpenDisplay, 
-    XRootWindowOfScreen
+    XRootWindowOfScreen,
+    XSelectInput,
 };
 
-pub use self::atoms::{
-    CommonAtom,
-    PredefinedAtom,
-    Atom,
-};
-
+pub use self::atoms::Atom;
 pub use self::atoms::CommonAtom::*;
 pub use self::atoms::PredefinedAtom::*;
 
+use self::event::EventMask;
+pub use self::event::EventMask::*;
+
 mod atoms;
 mod consts;
+mod event;
 
 /// X11 display connection.
 pub struct Display {
-    xlib_display: *mut xlib::Display,
+    pub xlib_display: *mut xlib::Display,
     atoms: RefCell<HashMap<String, xlib::Atom>>,
 }
 
@@ -86,7 +87,6 @@ impl Display {
             xlib_screen: screen,
         }
     }
-
 }
 
 pub struct Screen<'a> {
@@ -98,17 +98,25 @@ impl<'a> Screen<'a> {
     pub fn root_window(&self) -> Window {
         Window {
             display: self.display,
-            window: unsafe { XRootWindowOfScreen(self.xlib_screen) },
+            xlib_window: unsafe { XRootWindowOfScreen(self.xlib_screen) },
         }
     }
 }
 
 pub struct Window<'a> {
     display: &'a Display,
-    window: xlib::Window,
+    xlib_window: xlib::Window,
 }
 
 impl<'a> Window<'a> {
+    pub fn select_input(&self, masks: &[EventMask]) {
+        let mask: c_long = masks.iter().fold(0, |res, x| res | (*x as c_long));
+
+        let result = unsafe { XSelectInput(self.display.xlib_display, self.xlib_window, mask) };
+        println!("XSelectInput -> {}", result);
+        // result is ignored as e.g. 1 (BadRequest) may not be fail
+    }
+
     pub fn get_property<T:Atom+std::fmt::Debug+Sized>(&self, property: T) -> Option<WindowProperty> {
         unsafe {
             let mut return_type: xlib::Atom = uninitialized();
@@ -119,7 +127,7 @@ impl<'a> Window<'a> {
 
             let result = XGetWindowProperty(
                 self.display.xlib_display,
-                self.window,
+                self.xlib_window,
                 property.to_atom(self.display),
                 0,
                 1024 * 1024, // buffer size
@@ -131,7 +139,14 @@ impl<'a> Window<'a> {
                 &mut return_bytes_after,
                 &mut return_buffer);
 
-            if result != consts::Success { return None };
+            match result {
+                consts::Success     => (),
+                consts::BadAlloc    => return None,
+                consts::BadValue    => return None,
+                consts::BadWindow   => return None,
+                consts::BadAtom     => unreachable!(),
+                _                   => unreachable!(),
+            }
 
             if return_type == consts::None { return None };
 
