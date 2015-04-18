@@ -23,14 +23,13 @@ use xlib::{XEvent, XNextEvent};
 fn main() {
     let display = x11::Display::open_default().expect("Failed to open display");
 
-    let screen = display.default_screen();
-    let root = screen.root_window();
+    let root = display.default_root_window();
 
-    let property = root.get_property(_NET_DESKTOP_NAMES);
+    let property = display.get_window_property(root, _NET_DESKTOP_NAMES);
 
     println!("{:?}", property.expect("no such property").as_string());
 
-    root.select_input(&[x11::PropertyChangeMask]);
+    display.select_input(root, &[x11::PropertyChangeMask]);
 
     unsafe {
         loop {

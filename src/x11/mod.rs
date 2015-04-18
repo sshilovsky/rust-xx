@@ -16,9 +16,12 @@ use std::mem::{
 };
 use std::ptr;
 use xlib;
+
+#[allow(unused_imports)]
 use xlib::{ 
     XCloseDisplay,
     XDefaultScreenOfDisplay,
+    XDefaultRootWindow,
     XFree,
     XGetWindowProperty, 
     XInternAtom, 
@@ -43,6 +46,9 @@ pub struct Display {
     pub xlib_display: *mut xlib::Display,
     atoms: RefCell<HashMap<String, xlib::Atom>>,
 }
+
+#[derive(Clone,Copy)]
+pub struct Window(xlib::Window);
 
 impl Drop for Display {
     fn drop(&mut self) { unsafe {
@@ -78,46 +84,19 @@ impl Display {
         })
     }}
 
-    pub fn default_screen(&self) -> Screen {
-        let screen = unsafe { XDefaultScreenOfDisplay(self.xlib_display) };
-        assert!(screen != ptr::null_mut());
-
-        Screen {
-            display: self,
-            xlib_screen: screen,
-        }
+    pub fn default_root_window(&self) -> Window {
+        Window( unsafe { XDefaultRootWindow(self.xlib_display) } )
     }
-}
 
-pub struct Screen<'a> {
-    display: &'a Display,
-    xlib_screen: *mut xlib::Screen,
-}
-
-impl<'a> Screen<'a> {
-    pub fn root_window(&self) -> Window {
-        Window {
-            display: self.display,
-            xlib_window: unsafe { XRootWindowOfScreen(self.xlib_screen) },
-        }
-    }
-}
-
-pub struct Window<'a> {
-    display: &'a Display,
-    xlib_window: xlib::Window,
-}
-
-impl<'a> Window<'a> {
-    pub fn select_input(&self, masks: &[EventMask]) {
+    pub fn select_input(&self, window: Window, masks: &[EventMask]) {
         let mask: c_long = masks.iter().fold(0, |res, x| res | (*x as c_long));
 
-        let result = unsafe { XSelectInput(self.display.xlib_display, self.xlib_window, mask) };
+        let result = unsafe { XSelectInput(self.xlib_display, window.0, mask) };
         println!("XSelectInput -> {}", result);
         // result is ignored as e.g. 1 (BadRequest) may not be fail
     }
 
-    pub fn get_property<T:Atom+std::fmt::Debug+Sized>(&self, property: T) -> Option<WindowProperty> {
+    pub fn get_window_property<T:Atom+std::fmt::Debug+Sized>(&self, window: Window, property: T) -> Option<WindowProperty> {
         unsafe {
             let mut return_type: xlib::Atom = uninitialized();
             let mut return_format: c_int = uninitialized();
@@ -126,9 +105,9 @@ impl<'a> Window<'a> {
             let mut return_buffer: *mut c_uchar = uninitialized();
 
             let result = XGetWindowProperty(
-                self.display.xlib_display,
-                self.xlib_window,
-                property.to_atom(self.display),
+                self.xlib_display,
+                window.0,
+                property.to_atom(self),
                 0,
                 1024 * 1024, // buffer size
                 0,
