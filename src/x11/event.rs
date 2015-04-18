@@ -40,53 +40,54 @@ pub enum EventMask {
     OwnerGrabButtonMask     = 0x0100_0000,
 }
 
+#[derive(Debug)]
 pub struct Event {
     // type field is included into underlying enum
     pub serial: c_ulong,
     pub send_event: bool,
-    // includes display field
     pub window: Window,
 
     pub detail: EventDetail,
 }
 
+#[derive(Debug)]
 pub enum EventDetail {
     Unknown(c_int),
-    PropertyNotify { atom: xlib::Atom, time: xlib::Time, state: c_ulong },
+    PropertyNotify { atom: xlib::Atom, time: xlib::Time, state: c_int },
 }
 
-const KeyPress: c_int		= 2;
-const KeyRelease: c_int		= 3;
-const ButtonPress: c_int		= 4;
-const ButtonRelease: c_int		= 5;
-const MotionNotify: c_int		= 6;
-const EnterNotify: c_int		= 7;
-const LeaveNotify: c_int		= 8;
-const FocusIn: c_int		= 9;
-const FocusOut: c_int		= 10;
-const KeymapNotify: c_int		= 11;
-const Expose: c_int			= 12;
-const GraphicsExpose: c_int		= 13;
-const NoExpose: c_int		= 14;
-const VisibilityNotify: c_int	= 15;
-const CreateNotify: c_int		= 16;
-const DestroyNotify: c_int		= 17;
-const UnmapNotify: c_int		= 18;
-const MapNotify: c_int		= 19;
-const MapRequest: c_int		= 20;
-const ReparentNotify: c_int		= 21;
-const ConfigureNotify: c_int	= 22;
-const ConfigureRequest: c_int	= 23;
-const GravityNotify: c_int		= 24;
-const ResizeRequest: c_int		= 25;
-const CirculateNotify: c_int	= 26;
-const CirculateRequest: c_int	= 27;
-const PropertyNotify: c_int		= 28;
-const SelectionClear: c_int		= 29;
-const SelectionRequest: c_int	= 30;
-const SelectionNotify: c_int	= 31;
-const ColormapNotify: c_int		= 32;
-const ClientMessage: c_int		= 33;
-const MappingNotify: c_int		= 34;
-const GenericEvent: c_int		= 35;
+pub const KeyPress: c_int		= 2;
+pub const KeyRelease: c_int		= 3;
+pub const ButtonPress: c_int		= 4;
+pub const ButtonRelease: c_int		= 5;
+pub const MotionNotify: c_int		= 6;
+pub const EnterNotify: c_int		= 7;
+pub const LeaveNotify: c_int		= 8;
+pub const FocusIn: c_int		= 9;
+pub const FocusOut: c_int		= 10;
+pub const KeymapNotify: c_int		= 11;
+pub const Expose: c_int			= 12;
+pub const GraphicsExpose: c_int		= 13;
+pub const NoExpose: c_int		= 14;
+pub const VisibilityNotify: c_int	= 15;
+pub const CreateNotify: c_int		= 16;
+pub const DestroyNotify: c_int		= 17;
+pub const UnmapNotify: c_int		= 18;
+pub const MapNotify: c_int		= 19;
+pub const MapRequest: c_int		= 20;
+pub const ReparentNotify: c_int		= 21;
+pub const ConfigureNotify: c_int	= 22;
+pub const ConfigureRequest: c_int	= 23;
+pub const GravityNotify: c_int		= 24;
+pub const ResizeRequest: c_int		= 25;
+pub const CirculateNotify: c_int	= 26;
+pub const CirculateRequest: c_int	= 27;
+pub const PropertyNotify: c_int		= 28;
+pub const SelectionClear: c_int		= 29;
+pub const SelectionRequest: c_int	= 30;
+pub const SelectionNotify: c_int	= 31;
+pub const ColormapNotify: c_int		= 32;
+pub const ClientMessage: c_int		= 33;
+pub const MappingNotify: c_int		= 34;
+pub const GenericEvent: c_int		= 35;
 // #define LASTEvent		36

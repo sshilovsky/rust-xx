@@ -3,10 +3,6 @@ extern crate xlib;
 
 mod x11;
 
-use std::mem::{
-    uninitialized,
-};
-
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
 enum CustomAtom {
@@ -18,7 +14,6 @@ enum CustomAtom {
 impl x11::Atom for CustomAtom {}
 
 use CustomAtom::*;
-use xlib::{XEvent, XNextEvent};
 
 fn main() {
     let display = x11::Display::open_default().expect("Failed to open display");
@@ -31,14 +26,9 @@ fn main() {
 
     display.select_input(root, &[x11::PropertyChangeMask]);
 
-    unsafe {
-        loop {
-            let mut event: XEvent = uninitialized();
-            let result = XNextEvent(display.xlib_display, &mut event);
-            println!("XNextEvent -> {:?}", result);
-        }
+    loop {
+        let event = display.next_event();
+        println!("next_event() -> {:?}", event);
     };
-
-
 
 }

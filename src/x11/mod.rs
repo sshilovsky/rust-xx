@@ -1,3 +1,4 @@
+use libc;
 use libc::{
     c_int,
     c_long,
@@ -19,23 +20,29 @@ use xlib;
 
 #[allow(unused_imports)]
 use xlib::{ 
+    XAnyEvent,
     XCloseDisplay,
     XDefaultScreenOfDisplay,
     XDefaultRootWindow,
+    XEvent,
     XFree,
     XGetWindowProperty, 
     XInternAtom, 
+    XNextEvent,
     XOpenDisplay, 
+    XPropertyEvent,
     XRootWindowOfScreen,
     XSelectInput,
 };
+pub use xlib::Window;
 
 pub use self::atoms::Atom;
 pub use self::atoms::CommonAtom::*;
 pub use self::atoms::PredefinedAtom::*;
 
-use self::event::EventMask;
+use self::event::{EventDetail, EventMask};
 pub use self::event::EventMask::*;
+pub use self::event::Event;
 
 mod atoms;
 mod consts;
@@ -45,18 +52,51 @@ mod event;
 pub struct Display {
     pub xlib_display: *mut xlib::Display,
     atoms: RefCell<HashMap<String, xlib::Atom>>,
+    event_buffer: *mut XEvent,
 }
-
-#[derive(Clone,Copy)]
-pub struct Window(xlib::Window);
 
 impl Drop for Display {
     fn drop(&mut self) { unsafe {
         XCloseDisplay(self.xlib_display);
+        libc::free(self.event_buffer as *mut c_void);
     }}
 }
 
 impl Display {
+    fn get_event_as<T>(&self) -> &T {
+        unsafe { &*(self.event_buffer as *const T) }
+    }
+
+    pub fn next_event(&self) -> Event {
+        unsafe {
+            let result = XNextEvent(self.xlib_display, self.event_buffer);
+            assert!(result == 0);
+        }
+
+        let any_event: &XAnyEvent = self.get_event_as();
+
+        Event {
+            serial: any_event.serial,
+            send_event: any_event.send_event != 0,
+            window: any_event.window,
+            detail: match any_event._type {
+                event::PropertyNotify => {
+                    let event: &XPropertyEvent = self.get_event_as();
+                    EventDetail::PropertyNotify {
+                        atom: event.atom,
+                        time: event.time,
+                        state: event.state,
+                    }
+                },
+                v @ _ => EventDetail::Unknown(v),
+            }
+        }
+    }
+
+    pub fn get_atom<T:Atom+std::fmt::Debug+Sized>(&self, atom: T) -> xlib::Atom {
+        atom.to_atom(self)
+    }
+
     fn intern_atom(&self, atom_name: String) -> xlib::Atom {
         {
             let map = self.atoms.borrow();
@@ -81,17 +121,18 @@ impl Display {
         Some(Display {
             xlib_display: xlib_display,
             atoms: RefCell::new(HashMap::new()),
+            event_buffer: libc::malloc(256) as *mut XEvent,
         })
     }}
 
     pub fn default_root_window(&self) -> Window {
-        Window( unsafe { XDefaultRootWindow(self.xlib_display) } )
+        unsafe { XDefaultRootWindow(self.xlib_display) }
     }
 
     pub fn select_input(&self, window: Window, masks: &[EventMask]) {
         let mask: c_long = masks.iter().fold(0, |res, x| res | (*x as c_long));
 
-        let result = unsafe { XSelectInput(self.xlib_display, window.0, mask) };
+        let result = unsafe { XSelectInput(self.xlib_display, window, mask) };
         println!("XSelectInput -> {}", result);
         // result is ignored as e.g. 1 (BadRequest) may not be fail
     }
@@ -106,7 +147,7 @@ impl Display {
 
             let result = XGetWindowProperty(
                 self.xlib_display,
-                window.0,
+                window,
                 property.to_atom(self),
                 0,
                 1024 * 1024, // buffer size
